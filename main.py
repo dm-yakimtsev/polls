@@ -1,24 +1,23 @@
-# Импортируем необходимые классы.
 import logging
-from telegram.ext import Application, BaseHandler, TypeHandler, MessageHandler, filters
+from telegram.ext import Application, BaseHandler, TypeHandler, MessageHandler, filters, CommandHandler
+from telegram import ReplyKeyboardMarkup
 from config import TOKEN
 
-# Запускаем логгирование
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG
-)
+from logic import Logic
 
-logger = logging.getLogger(__name__)
+
+# Запускаем логгирование
 
 
 def main():
-    # Создаём объект Application.
-    application = Application.builder().token(TOKEN).build()
+    logic = Logic()
+    logic.start()
 
     # Запускаем приложение.
-    application.run_polling()
+    logic.app.run_polling()
 
 
 # Запускаем функцию main() в случае запуска скрипта.
 if __name__ == '__main__':
     main()
+
