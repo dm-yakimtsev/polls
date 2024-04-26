@@ -18,16 +18,13 @@ class Logic:
         self.command = Command()
 
     def start(self):
-        """Добавляем все обработчики и создаем начальную клавиатуру"""
-        reply_keyboard = [['Создать опрос'], ['Ответить на опрос']]
-        markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
-        self.command.markup = markup
+        """Добавляем все обработчики"""
         self.app.add_handler(CommandHandler('start', self.command.start))
         self.app.add_handler(MessageHandler(filters.Regex("^Ответить на опрос$"), self.command.answer_to_poll))
         self.app.add_handler(self.create_poll_dialoge())
 
     def create_poll_dialoge(self):
-        """Создает диалог опроса ConversationHandler и возвращает его"""
+        """Создает сценарий диалога опроса ConversationHandler и возвращает его"""
         conv_handler = ConversationHandler(
             entry_points=[MessageHandler(filters.Regex("^Создать опрос$"), self.command.get_question)],
             states={
