@@ -19,7 +19,7 @@ class Logic:
 
     def start(self):
         """Добавляем все обработчики и создаем начальную клавиатуру"""
-        reply_keyboard = [['Создать опрос', 'Ответить на опрос']]
+        reply_keyboard = [['Создать опрос'], ['Ответить на опрос']]
         markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
         self.command.markup = markup
         self.app.add_handler(CommandHandler('start', self.command.start))
@@ -35,8 +35,13 @@ class Logic:
                     MessageHandler(
                         filters.TEXT, self.command.get_answer
                     )
-                ]
-
+                ],
+                2: [
+                    MessageHandler(filters.AUDIO, self.command.add_media),
+                    MessageHandler(filters.PHOTO, self.command.add_media),
+                    MessageHandler(filters.VIDEO, self.command.add_media),
+                    MessageHandler(filters.ALL, self.command.wrong_input)
+                ],
             },
             fallbacks=[CommandHandler('done', self.command.done)],
         )
