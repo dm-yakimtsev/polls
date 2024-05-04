@@ -5,6 +5,7 @@ from telegram import ReplyKeyboardMarkup
 from commands import Command
 from config import TOKEN
 
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG
 )
@@ -20,8 +21,9 @@ class Logic:
     def start(self):
         """Добавляем все обработчики"""
         self.app.add_handler(CommandHandler('start', self.command.start))
-        self.app.add_handler(MessageHandler(filters.Regex("^Ответить на опрос$"), self.command.answer_to_poll))
         self.app.add_handler(self.create_poll_dialoge())
+        self.app.add_handler(MessageHandler(filters.Regex("^Ответить на опрос$"), self.command.answer_to_poll))
+        self.app.add_handler(MessageHandler(filters.ALL, self.command.help))
 
     def create_poll_dialoge(self):
         """Создает сценарий диалога опроса ConversationHandler и возвращает его"""
@@ -30,8 +32,9 @@ class Logic:
             states={
                 1: [
                     MessageHandler(
-                        filters.TEXT, self.command.get_answer
-                    )
+                        filters.TEXT, self.command.get_answer),
+                    MessageHandler(
+                        filters.ALL, self.command.wrong_get_answer)
                 ],
                 2: [
                     MessageHandler(filters.AUDIO, self.command.add_media),
@@ -40,6 +43,8 @@ class Logic:
                     MessageHandler(filters.ALL, self.command.wrong_input)
                 ],
             },
-            fallbacks=[CommandHandler('done', self.command.done)],
+            fallbacks=[CommandHandler('done', self.command.done),
+                       ],
+            name='create_poll_dialoge'
         )
         return conv_handler
