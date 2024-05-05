@@ -1,7 +1,7 @@
-import sqlite3
-from telegram import ReplyKeyboardMarkup
+from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ConversationHandler
 from copy import deepcopy
+from database.db import DataBase
 
 
 class Command:
@@ -9,7 +9,8 @@ class Command:
         self.markup = None
         # Нужен для восстановления отключаемых обработчиков
         self.all_handlers = []
-        self.already_answered = []
+        self.handlers_to_remove = []
+        self.database = DataBase("database/polls.db")
 
     async def start(self, update, context):
         """Отправляет сообщение когда получена команда /start"""
@@ -27,16 +28,17 @@ class Command:
     async def get_question(self, update, context):
         """Начало диолога"""
         # Копируем все обработчики
-        self.all_handlers = deepcopy(context.application.handlers)
+
         # Отключаем все кроме нашего
         for i in context.application.handlers:
             for handler in context.application.handlers[i]:
                 if str(handler.__class__) != "<class 'telegram.ext._handlers.conversationhandler.ConversationHandler'>":
-
-                    context.application.remove_handler(handler)
+                    self.handlers_to_remove.append(handler)
                 elif handler.name != 'create_poll_dialoge':
+                    self.handlers_to_remove.append(handler)
 
-                    context.application.remove_handler(handler)
+        for handler in self.handlers_to_remove:
+            context.application.remove_handler(handler)
 
         # Создаем поля для избежания ошибки KeyError
         context.user_data['question'] = ''
@@ -57,9 +59,9 @@ class Command:
         if update.message.photo:
             context.user_data['media'] = update.message.photo[0].file_id, 'photo'
         elif update.message.video:
-            context.user_data['media'] = update.message.video[0].file_id, 'video'
+            context.user_data['media'] = update.message.video.file_id, 'video'
         elif update.message.audio:
-            context.user_data['media'] = update.message.audio[0].file_id, 'audio'
+            context.user_data['media'] = update.message.audio.file_id, 'audio'
 
         await update.message.reply_text(
             'Успешно сохраненно!')
@@ -78,16 +80,13 @@ class Command:
         # Передаем управление get_answer
         return 1
 
-    async def get_answer(self, update, context):
+    async def get_poll_data(self, update, context):
         """Записывает данные и завершает диалог"""
         text = update.message.text
 
         if text == '/done':
+            # Сохраняем информацию об опросе
             user_data = context.user_data
-            # Подключение к БД
-            con = sqlite3.connect("polls.db")
-            cur = con.cursor()
-            # Записываем все данные в бд
             question, answer_opt, media = user_data['question'], user_data['answer_options'], str(
                 user_data[
                     'media'])
@@ -112,22 +111,19 @@ class Command:
                 # Завершаем диалог
                 return ConversationHandler.END
 
-            # Если нет media не записывем ее
+            # Если есть media записываем ее
             if media != "('', '')":
-                cur.execute("INSERT INTO poll (question, answer_options, media) VALUES (?, ?, ?)",
-                            (question, answer_opt, media))
+                self.database.insert_media(question, answer_opt, media)
             else:
-                cur.execute("INSERT INTO poll (question, answer_options) VALUES (?, ?)",
-                            (question, answer_opt))
-            con.commit()
-            con.close()
+                self.database.insert_poll_data(question, answer_opt)
 
             # Отчищаем user_data
             user_data.clear()
 
-            # Востонавливаем обработчики
-            context.application.handlers = self.all_handlers
-            self.all_handlers = []
+            # Восстанавливаем обработчики
+            for handler in self.handlers_to_remove:
+                context.application.add_handler(handler)
+            self.handlers_to_remove = []
 
             # Возвращаем клавиатуру
             reply_keyboard = [['Создать опрос'], ['Ответить на опрос']]
@@ -184,3 +180,59 @@ class Command:
 
     async def help(self, update, _):
         await update.message.reply_text('Чтобы начать введите /start.')
+
+    async def get_answer(self, update, context):
+        """Начало диалога ответа на опрос"""
+        # Отключаем обработчики все кроме нашего
+        self.handlers_to_remove = []
+        for i in context.application.handlers:
+            for handler in context.application.handlers[i]:
+                if str(handler.__class__) != "<class 'telegram.ext._handlers.conversationhandler.ConversationHandler'>":
+                    self.handlers_to_remove.append(handler)
+                elif handler.name != 'answer_to_poll_dialoge':
+                    self.handlers_to_remove.append(handler)
+
+        for handler in self.handlers_to_remove:
+            context.application.remove_handler(handler)
+        # Отправляем опрос
+        await self.send_poll(update, context)
+
+        return 1
+
+    async def select_answer(self, update, context):
+        """Отлавливает какая кнопка была нажата в ответе на опрос"""
+        query = update.callback_query
+        variant = query.data
+        await query.answer()
+        # Удаляем предидущий опрос и создаем новый
+        await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+        await self.send_poll(update, context)
+        return 1
+
+    async def send_poll(self, update, context):
+        """Отправляет отформатированный опрос"""
+        poll = self.database.get_random_poll()
+        # Cоздаем inline клавиатуру
+        answer_opt_list = poll[2].split(';')
+        keyboard = [[InlineKeyboardButton(f'{answer_opt_list[i]}', callback_data=i)] for i in
+                    range(len(answer_opt_list))]
+        self.markup = InlineKeyboardMarkup(keyboard)
+        # Если есть медиа отправляем ее, а вопрос отправляем как подпись к медиа
+        if poll[3]:
+            media = poll[3].split()
+            file_id = media[0][2:-2]
+            file_type = media[1][1:-2]
+            if file_type == 'photo':
+                await context.bot.send_photo(chat_id=update.effective_chat.id, photo=file_id, caption=poll[1],
+                                             reply_markup=self.markup)
+
+            elif file_type == 'video':
+                await context.bot.send_video(chat_id=update.effective_chat.id, video=file_id, caption=poll[1],
+                                             reply_markup=self.markup)
+
+            elif file_type == 'audio':
+                await context.bot.send_audio(chat_id=update.effective_chat.id, audio=file_id, caption=poll[1],
+                                             reply_markup=self.markup)
+        else:
+            await context.bot.send_message(text=f'{poll[1]}', chat_id=update.effective_chat.id,
+                                           reply_markup=self.markup)
