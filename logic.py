@@ -5,11 +5,11 @@ from telegram import ReplyKeyboardMarkup
 from commands import Command
 from config import TOKEN
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG
-)
-
-logger = logging.getLogger(__name__)
+# logging.basicConfig(
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG
+# )
+#
+# logger = logging.getLogger(__name__)
 
 
 class Logic:

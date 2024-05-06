@@ -15,15 +15,22 @@ class Command:
     async def start(self, update, context):
         """Отправляет сообщение когда получена команда /start"""
         user = update.effective_user
+        user_id = int(update.effective_user.id)
         # Создаем начальную клавиатуру
         reply_keyboard = [['Создать опрос'], ['Ответить на опрос']]
         markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
         self.markup = markup
-
-        await update.message.reply_html(
-            rf"Привет {user.mention_html()}! Выберите действие",
-            reply_markup=self.markup
-        )
+        if len(self.database.find_user(user_id)) == 0:
+            self.database.remember_user(user_id)
+            await update.message.reply_html(
+                rf"Здравствуйте! Выберите действие.",
+                reply_markup=self.markup
+            )
+        else:
+            await update.message.reply_html(
+                rf"Привет {user.mention_html()}! Выберите действие.",
+                reply_markup=self.markup
+            )
 
     async def get_question(self, update, context):
         """Начало диолога"""

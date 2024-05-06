@@ -52,3 +52,14 @@ class DataBase:
                           SET total = ?
                           WHERE id = ?""", (total, id))
             self.connection.commit()
+
+    def remember_user(self, id):
+        with self.connection:
+            self.cursor.execute("INSERT INTO user (user_id) VALUES (?)",
+                                (id, ))
+            self.connection.commit()
+
+    def find_user(self, id):
+        with self.connection:
+            res = self.cursor.execute(f"SELECT user_id FROM user WHERE user_id=?", (id,)).fetchall()
+            return res
