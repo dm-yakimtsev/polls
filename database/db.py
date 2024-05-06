@@ -21,11 +21,13 @@ class DataBase:
             self.connection.commit()
 
     def get_statistics(self, id):
+        """Достает из базы данных статистику"""
         with self.connection:
-            res = self.cursor.execute(f"SELECT quantity FROM poll WHERE id={id}").fetchall()[0][0]
+            res = self.cursor.execute(f"SELECT statistics FROM poll WHERE id={id}").fetchall()[0][0]
             return res
 
     def update_statistics(self, id, statistics):
+        """Обновляет статистику"""
         with self.connection:
             self.cursor.execute(f"""UPDATE poll
                SET statistics = ?
@@ -33,7 +35,20 @@ class DataBase:
             self.connection.commit()
 
     def get_random_poll(self):
-        # Выбираем случайный опрос
+        """Выбирает случайный опрос"""
         with self.connection:
             poll = self.cursor.execute(f"SELECT * FROM main.poll ORDER BY RANDOM() LIMIT 1").fetchall()[0]
             return poll
+
+    def update_total(self, id, statistics):
+        """Считает сумму проголосовавших из статистики и сохраняет"""
+        total = 0
+        for el in statistics:
+            # Если длина элемента равна двум никто еще не голосовал за этот вариант
+            if len(el) != 2:
+                total += int(el.split('-')[1])
+        with self.connection:
+            self.cursor.execute(f"""UPDATE poll
+                          SET total = ?
+                          WHERE id = ?""", (total, id))
+            self.connection.commit()

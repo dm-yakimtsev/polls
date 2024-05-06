@@ -244,8 +244,11 @@ class Command:
             number_of_answer_opt = statistics[variant].split('-')[0]
             statistics_of_answer_opt = statistics[variant].split('-')[1]
             statistics[variant] = number_of_answer_opt + '-' + str(int(statistics_of_answer_opt) + 1)
+
         # Делаем из этого списка строку и сохраняем в бд
         self.database.update_statistics(poll_id, ';'.join(statistics))
+        # Обновляем значение суммы
+        self.database.update_total(poll_id, statistics)
 
         context.user_data.clear()
         # Удаляем предыдущий опрос и создаем новый
