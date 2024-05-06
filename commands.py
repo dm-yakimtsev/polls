@@ -90,6 +90,8 @@ class Command:
             question, answer_opt, media = user_data['question'], user_data['answer_options'], str(
                 user_data[
                     'media'])
+            # Делаем строку-шаблон для сохранения в бд '1-;2-;3-'
+            statistics = ''.join([f'{i + 1}-;' for i in range(len(answer_opt.split(';')))])[:-1]
             # Если недостаточно данных говорим об этом и завершаем диалог
             if not question:
                 # Возвращаем клавиатуру
@@ -113,9 +115,9 @@ class Command:
 
             # Если есть media записываем ее
             if media != "('', '')":
-                self.database.insert_media(question, answer_opt, media)
+                self.database.insert_media(question, answer_opt, media, statistics)
             else:
-                self.database.insert_poll_data(question, answer_opt)
+                self.database.insert_poll_data(question, answer_opt, statistics)
 
             # Отчищаем user_data
             user_data.clear()
@@ -178,7 +180,31 @@ class Command:
         """Завершает диалог"""
         return ConversationHandler.END
 
+    async def answer_to_poll_help(self, update, context):
+        """Обрабатывает текст от пользователя в диалоге ответа на опрос"""
+        # Если была введенна команда /done завершаем диалог
+        if update.message.text == '/done':
+            # Отчищаем user_data
+            context.user_data.clear()
+
+            # Восстанавливаем обработчики
+            for handler in self.handlers_to_remove:
+                context.application.add_handler(handler)
+            self.handlers_to_remove = []
+
+            # Возвращаем клавиатуру
+            reply_keyboard = [['Создать опрос'], ['Ответить на опрос']]
+            self.markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+            await update.message.reply_text('Выберите действие', reply_markup=self.markup)
+
+            # Завершаем диалог
+            return ConversationHandler.END
+        else:
+            await update.message.reply_text('Чтобы закончить введите /done.')
+            return 1
+
     async def help(self, update, _):
+        """Обравбатывает текст вне диалога"""
         await update.message.reply_text('Чтобы начать введите /start.')
 
     async def get_answer(self, update, context):
@@ -194,17 +220,35 @@ class Command:
 
         for handler in self.handlers_to_remove:
             context.application.remove_handler(handler)
-        # Отправляем опрос
+        # Отправляем опрос и выводим подсказку
+        await update.message.reply_text('Чтобы закончить введите /done.')
         await self.send_poll(update, context)
-
         return 1
 
     async def select_answer(self, update, context):
         """Отлавливает какая кнопка была нажата в ответе на опрос"""
         query = update.callback_query
-        variant = query.data
+
+        variant = int(query.data)
         await query.answer()
-        # Удаляем предидущий опрос и создаем новый
+        # Достаем из контекста id опроса
+        poll_id = context.user_data['poll_id']
+        # Достаем из базы данных строку с количеством проголосовавши
+        statistics = self.database.get_statistics(poll_id).split(';')
+
+        # Если строка вида 1- значит это был первый проголосовавший
+        if len(statistics[variant]) == 2:
+            statistics[variant] += '1'
+        else:
+            # Прибавляем еще 1
+            number_of_answer_opt = statistics[variant].split('-')[0]
+            statistics_of_answer_opt = statistics[variant].split('-')[1]
+            statistics[variant] = number_of_answer_opt + '-' + str(int(statistics_of_answer_opt) + 1)
+        # Делаем из этого списка строку и сохраняем в бд
+        self.database.update_statistics(poll_id, ';'.join(statistics))
+
+        context.user_data.clear()
+        # Удаляем предыдущий опрос и создаем новый
         await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
         await self.send_poll(update, context)
         return 1
@@ -212,11 +256,16 @@ class Command:
     async def send_poll(self, update, context):
         """Отправляет отформатированный опрос"""
         poll = self.database.get_random_poll()
+
+        # Сохраняем id полученного опроса
+        context.user_data['poll_id'] = poll[0]
         # Cоздаем inline клавиатуру
         answer_opt_list = poll[2].split(';')
+
         keyboard = [[InlineKeyboardButton(f'{answer_opt_list[i]}', callback_data=i)] for i in
                     range(len(answer_opt_list))]
         self.markup = InlineKeyboardMarkup(keyboard)
+
         # Если есть медиа отправляем ее, а вопрос отправляем как подпись к медиа
         if poll[3]:
             media = poll[3].split()

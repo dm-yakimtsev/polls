@@ -54,6 +54,8 @@ class Logic:
             states={
                 1: [
                     CallbackQueryHandler(self.command.select_answer, pattern='^.*$'),
+                    MessageHandler(filters.TEXT, self.command.answer_to_poll_help)
+
 
                 ],
 

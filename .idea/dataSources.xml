@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
-    <data-source source="LOCAL" name="polls" uuid="3e9a86bd-6a78-44e4-9dff-2fc67aca2246">
+    <data-source source="LOCAL" name="polls.db" uuid="3e9a86bd-6a78-44e4-9dff-2fc67aca2246">
       <driver-ref>sqlite.xerial</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
-      <jdbc-url>jdbc:sqlite:$PROJECT_DIR$/polls.db</jdbc-url>
+      <jdbc-url>jdbc:sqlite:$PROJECT_DIR$/database/polls.db</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
       <libraries>
         <library>
