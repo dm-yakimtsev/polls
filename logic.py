@@ -28,7 +28,10 @@ class Logic:
             entry_points=[MessageHandler(filters.Regex("^Создать опрос$"),
                                          self.command.get_question),
                           MessageHandler(filters.Regex("^Ответить на опрос$"),
-                                         self.command.get_answer)],
+                                         self.command.get_answer),
+                          MessageHandler(filters.Regex("^Мои опросы$"),
+                                         self.command.show_polls)
+                          ],
             states={
                 1: [
                     MessageHandler(
@@ -47,7 +50,12 @@ class Logic:
                 3: [
                     CallbackQueryHandler(self.command.select_answer, pattern='^.*$'),
                     MessageHandler(filters.TEXT, self.command.answer_to_poll_help)
-                ]
+                ],
+                4:
+                    [
+                        CallbackQueryHandler(self.command.show_stats, pattern='^.*$'),
+                        MessageHandler(filters.TEXT, self.command.show_stats_help)
+                    ]
             },
             fallbacks=[CommandHandler('done', self.command.done),
                        ],

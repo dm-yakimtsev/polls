@@ -100,3 +100,14 @@ class DataBase:
         with self.connection:
             polls = self.cursor.execute(f"SELECT * FROM main.poll").fetchall()
             return polls
+
+    def get_user_polls(self, user_id):
+        with self.connection:
+            res = self.cursor.execute(f"SELECT * FROM poll WHERE author_id=?", (user_id,)).fetchall()
+
+            return res
+
+    def get_poll(self, poll_id):
+        with self.connection:
+            res = self.cursor.execute(f"SELECT * FROM poll WHERE id=?", (poll_id,)).fetchall()[0]
+            return res

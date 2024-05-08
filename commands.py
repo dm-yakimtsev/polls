@@ -14,7 +14,7 @@ class Command:
         user = update.effective_user
         user_id = int(update.effective_user.id)
         # Создаем начальную клавиатуру
-        reply_keyboard = [['Создать опрос'], ['Ответить на опрос']]
+        reply_keyboard = [['Создать опрос', 'Ответить на опрос'], ['Мои опросы']]
         markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
         self.markup = markup
         # Если пользователь не найден запоминаем его
@@ -80,6 +80,7 @@ class Command:
         text = update.message.text
 
         if text == '/done':
+
             # Сохраняем информацию об опросе
             user_data = context.user_data
             user_id = int(update.effective_user.id)
@@ -88,11 +89,13 @@ class Command:
                     'media'])
             # Делаем строку-шаблон для сохранения в бд '1-;2-;3-'
             statistics = ''.join([f'{i + 1}-;' for i in range(len(answer_opt.split(';')))])[:-1]
+
+            # Возвращаем клавиатуру
+            reply_keyboard = [['Создать опрос', 'Ответить на опрос'], ['Мои опросы']]
+            self.markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+
             # Если недостаточно данных говорим об этом и завершаем диалог
             if not question:
-                # Возвращаем клавиатуру
-                reply_keyboard = [['Создать опрос'], ['Ответить на опрос']]
-                self.markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
                 # Сообщаем о недостатке данных
                 await update.message.reply_text('Опрос не был создан (нет вопроса)',
                                                 reply_markup=self.markup)
@@ -103,9 +106,6 @@ class Command:
                 return ConversationHandler.END
 
             if len(answer_opt.split(';')) < 2:
-                # Возвращаем клавиатуру
-                reply_keyboard = [['Создать опрос'], ['Ответить на опрос']]
-                self.markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
                 # Сообщаем о недостатке данных
                 await update.message.reply_text('Опрос не был создан (меньше двух вариантов ответа)',
                                                 reply_markup=self.markup)
@@ -123,10 +123,6 @@ class Command:
 
             # Отчищаем user_data
             user_data.clear()
-
-            # Возвращаем клавиатуру
-            reply_keyboard = [['Создать опрос'], ['Ответить на опрос']]
-            self.markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
             await update.message.reply_text('Готово!', reply_markup=self.markup)
 
             # Завершаем диалог
@@ -190,7 +186,7 @@ class Command:
             # Отчищаем user_data
             context.user_data.clear()
             # Возвращаем клавиатуру
-            reply_keyboard = [['Создать опрос'], ['Ответить на опрос']]
+            reply_keyboard = [['Создать опрос', 'Ответить на опрос'], ['Мои опросы']]
             self.markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
             await update.message.reply_text('Выберите действие', reply_markup=self.markup)
 
@@ -206,10 +202,15 @@ class Command:
 
     async def get_answer(self, update, context):
         """Начало диалога ответа на опрос"""
+        # Для избежания ошибки KeyError
         context.user_data['end'] = False
+
+        # Удаляем клавиатуру
+        self.markup = {'remove_keyboard': True}
         # Отправляем опрос и выводим подсказку
-        await update.message.reply_text('Чтобы закончить введите /done.')
+        await update.message.reply_text('Чтобы закончить введите /done.', reply_markup=self.markup)
         await self.send_poll(update, context)
+        # Выполняется когда пользователь уже ответил на все опросы
         if context.user_data['end']:
             context.user_data.clear()
             return ConversationHandler.END
@@ -244,6 +245,7 @@ class Command:
         # Удаляем предыдущий опрос и создаем новый
         await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
         await self.send_poll(update, context)
+        # Выполняется когда пользователь уже ответил на все опросы
         if context.user_data['end']:
             context.user_data.clear()
             return ConversationHandler.END
@@ -259,7 +261,7 @@ class Command:
         if len(responses) != 1 and len(responses) - 1 == len(self.database.get_all_polls()):
             context.user_data['end'] = True
             # Возвращаем клавиатуру
-            reply_keyboard = [['Создать опрос'], ['Ответить на опрос']]
+            reply_keyboard = [['Создать опрос', 'Ответить на опрос'], ['Мои опросы']]
             self.markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
             await context.bot.send_message(text=f'Приходите позже.Вы ответили на все опросы.',
                                            chat_id=update.effective_chat.id,
@@ -297,3 +299,81 @@ class Command:
             else:
                 await context.bot.send_message(text=f'{poll[1]}', chat_id=update.effective_chat.id,
                                                reply_markup=self.markup)
+
+    async def show_polls(self, update, context):
+
+        user_id = int(update.effective_user.id)
+        polls = self.database.get_user_polls(user_id)
+        if len(polls) != 0:
+            keyboard = [[InlineKeyboardButton(f'{poll[1]}', callback_data=poll[0])] for poll in polls]
+            self.markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text('Выберите опрос, чтобы выйти введите /done', reply_markup=self.markup)
+            return 4
+        else:
+            # Возвращаем клавиатуру
+            reply_keyboard = [['Создать опрос', 'Ответить на опрос'], ['Мои опросы']]
+            self.markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+            await context.bot.send_message(text=f'Похоже у вас нет опросов, чтобы создать опрос введите Создать опрос',
+                                           chat_id=update.effective_chat.id,
+                                           reply_markup=self.markup)
+            return ConversationHandler.END
+
+    async def show_stats(self, update, context):
+        query = update.callback_query
+
+        poll_id = int(query.data)
+        await query.answer()
+        poll = self.database.get_poll(poll_id=poll_id)
+        # Возвращаем клавиатуру
+        reply_keyboard = [['Создать опрос', 'Ответить на опрос'], ['Мои опросы']]
+        self.markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+        msg = f'{poll[1]}\n{self.format_anw_options_stats(poll[2], poll[5], poll[6])}'
+
+        # Если есть медиа отправляем ее, а вопрос отправляем как подпись к медиа
+        if poll[3]:
+            media = poll[3].split()
+            file_id = media[0][2:-2]
+            file_type = media[1][1:-2]
+            if file_type == 'photo':
+                await context.bot.send_photo(chat_id=update.effective_chat.id, photo=file_id, caption=msg,
+                                             reply_markup=self.markup)
+
+            elif file_type == 'video':
+                await context.bot.send_video(chat_id=update.effective_chat.id, video=file_id, caption=msg,
+                                             reply_markup=self.markup)
+
+            elif file_type == 'audio':
+                await context.bot.send_audio(chat_id=update.effective_chat.id, audio=file_id, caption=msg,
+                                             reply_markup=self.markup)
+        else:
+            await context.bot.send_message(text=f'{msg}', chat_id=update.effective_chat.id,
+                                           reply_markup=self.markup)
+        return ConversationHandler.END
+
+    async def show_stats_help(self, update, context):
+
+        if update.message.text == '/done':
+            # Возвращаем клавиатуру
+            reply_keyboard = [['Создать опрос', 'Ответить на опрос'], ['Мои опросы']]
+            self.markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+            await update.message.reply_text('Выберите действие', reply_markup=self.markup)
+            return ConversationHandler.END
+        await update.message.reply_text('Выберите опрос, чтобы выйти введите /done')
+        return 4
+
+    def format_anw_options_stats(self, answ_opt, stats, total):
+        msg = ''
+        stats_list = stats.split(';')
+        answ_opt_list = answ_opt.split(';')
+        for i in range(len(answ_opt_list)):
+            print(stats_list[i][2:])
+            if len(stats_list[i]) != 2:
+                msg += f'{answ_opt_list[i]} - {stats_list[i][2:]} голосов\n'
+            else:
+                msg += f'{answ_opt_list[i]} - 0 голосов\n'
+        if total is not None:
+            msg += 'Всего:' + str(total)
+        else:
+            msg += 'Всего:' + str(0)
+
+        return msg
