@@ -20,7 +20,10 @@ class Logic:
         """Добавляем все обработчики"""
         self.app.add_handler(self.create_dialoge())
         self.app.add_handler(CommandHandler('start', self.command.start))
+
         self.app.add_handler(MessageHandler(filters.ALL, self.command.help))
+
+
 
     def create_dialoge(self):
         """Создает сценарий диалога опроса ConversationHandler и возвращает его"""
@@ -30,8 +33,10 @@ class Logic:
                           MessageHandler(filters.Regex("^Ответить на опрос$"),
                                          self.command.get_answer),
                           MessageHandler(filters.Regex("^Мои опросы$"),
-                                         self.command.show_polls)
+                                         self.command.show_polls),
                           ],
+
+
             states={
                 1: [
                     MessageHandler(
