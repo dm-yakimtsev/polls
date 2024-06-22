@@ -13,9 +13,21 @@ class Command:
         """Отправляет сообщение когда получена команда /start"""
         user = update.effective_user
         user_id = update.effective_chat.id
+
         if len(self.database.find_user(user_id)) == 0:
             # Если пользователь не найден запоминаем его
             self.database.remember_user(user_id)
+        # Если перешли по ссылке с id опроса отправляем опрос и ждем ответ
+        if len(update.message.text.split()) == 2:
+            poll_id = update.message.text.split()[1]
+            if poll_id not in self.database.get_responses(user_id).split(';'):
+                poll = self.database.get_poll(poll_id)
+                await update.message.reply_text('Чтобы закончить введите /done.', reply_markup=self.markup)
+                # Запоминаем poll_id
+                context.user_data['poll_id'] = poll_id
+                await self.create_poll(update, context, poll)
+                return 5
+            await update.message.reply_text('Похоже вы уже отвечали на этот опрос', reply_markup=self.markup)
 
         # Создаем начальную клавиатуру
         reply_keyboard = [['Создать опрос', 'Ответить на опрос'], ['Мои опросы']]
@@ -197,12 +209,11 @@ class Command:
 
     async def get_answer(self, update, context):
         """Начало диалога ответа на опрос"""
-
         # Удаляем клавиатуру
         self.markup = {'remove_keyboard': True}
         # Отправляем опрос и выводим подсказку
         await update.message.reply_text('Чтобы закончить введите /done.', reply_markup=self.markup)
-        await self.send_poll(update, context)
+        await self.send_random_poll(update, context)
         # Выполняется когда пользователь уже ответил на все опросы
         if context.user_data['end']:
             context.user_data.clear()
@@ -218,17 +229,18 @@ class Command:
 
         # Удаляем предыдущий опрос и создаем новый
         await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
-        await self.send_poll(update, context)
+        await self.send_random_poll(update, context)
         # Выполняется когда пользователь уже ответил на все опросы
         if context.user_data['end']:
             context.user_data.clear()
             return ConversationHandler.END
         return 3
 
-    async def send_poll(self, update, context):
-        """Отправляет отформатированный опрос"""
+    async def send_random_poll(self, update, context):
+        """Создает случайный опрос"""
         user_id = int(update.effective_user.id)
         responses = self.database.get_responses(user_id).split(';')
+
         context.user_data['end'] = False
         if len(responses) != 1 and len(responses) - 1 == len(self.database.get_all_polls()):
             context.user_data['end'] = True
@@ -245,44 +257,41 @@ class Command:
 
             # Сохраняем id полученного опроса
             context.user_data['poll_id'] = poll[0]
-            # Cоздаем inline клавиатуру
-            answer_opt_list = poll[2].split(';')
+            # Создаем опрос
+            await self.create_poll(update, context, poll)
 
-            keyboard = [[InlineKeyboardButton(f'{answer_opt_list[i]}', callback_data=i)] for i in
-                        range(len(answer_opt_list))]
-            self.markup = InlineKeyboardMarkup(keyboard)
+    async def create_poll(self, update, context, poll):
+        """Отправляет отформатированный опрос"""
+        # Cоздаем inline клавиатуру
+        answer_opt_list = poll[2].split(';')
 
-            # Если есть медиа отправляем ее, а вопрос отправляем как подпись к медиа
-            if poll[3]:
-                media = poll[3].split()
-                file_id = media[0][2:-2]
-                file_type = media[1][1:-2]
-                if file_type == 'photo':
-                    context.user_data['poll_msg'] = await context.bot.send_photo(chat_id=update.effective_chat.id,
-                                                                                 photo=file_id, caption=poll[1],
-                                                                                 reply_markup=self.markup)
+        keyboard = [[InlineKeyboardButton(f'{answer_opt_list[i]}', callback_data=i)] for i in
+                    range(len(answer_opt_list))]
+        self.markup = InlineKeyboardMarkup(keyboard)
 
-                elif file_type == 'video':
-                    context.user_data['poll_msg'] = await context.bot.send_video(chat_id=update.effective_chat.id,
-                                                                                 video=file_id, caption=poll[1],
-                                                                                 reply_markup=self.markup)
+        # Если есть медиа отправляем ее, а вопрос отправляем как подпись к медиа
+        if poll[3]:
+            media = poll[3].split()
+            file_id = media[0][2:-2]
+            file_type = media[1][1:-2]
+            if file_type == 'photo':
+                await context.bot.send_photo(chat_id=update.effective_chat.id,
+                                             photo=file_id, caption=poll[1],
+                                             reply_markup=self.markup)
 
-                elif file_type == 'audio':
-                    context.user_data['poll_msg'] = await context.bot.send_audio(chat_id=update.effective_chat.id,
-                                                                                 audio=file_id, caption=poll[1],
-                                                                                 reply_markup=self.markup)
-            else:
-                context.user_data['poll_msg'] = await context.bot.send_message(text=f'{poll[1]}',
-                                                                               chat_id=update.effective_chat.id,
-                                                                               reply_markup=self.markup)
+            elif file_type == 'video':
+                await context.bot.send_video(chat_id=update.effective_chat.id,
+                                             video=file_id, caption=poll[1],
+                                             reply_markup=self.markup)
 
-    async def write_results(self, update, context):
-        query = update.callback_query
-        variant = int(query.data)
-        await query.answer()
-        self.write_statistic(context.user_data['poll_id'], update.effective_chat.id, variant)
-        # Удаляем предыдущий опрос
-        await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+            elif file_type == 'audio':
+                await context.bot.send_audio(chat_id=update.effective_chat.id,
+                                             audio=file_id, caption=poll[1],
+                                             reply_markup=self.markup)
+        else:
+            await context.bot.send_message(text=f'{poll[1]}',
+                                           chat_id=update.effective_chat.id,
+                                           reply_markup=self.markup)
 
     async def show_polls(self, update, context):
         user_id = int(update.effective_user.id)
@@ -376,3 +385,18 @@ class Command:
         # Обновляем значение суммы
         self.database.update_total(poll_id, statistics)
         self.database.insert_responses(int(user_id), poll_id)
+
+    async def definite_poll_answer(self, update, context):
+        query = update.callback_query
+        variant = int(query.data)
+        await query.answer()
+        self.write_statistic(context.user_data['poll_id'], update.effective_chat.id, variant)
+        # Возвращаем клавиатуру
+        reply_keyboard = [['Создать опрос', 'Ответить на опрос'], ['Мои опросы']]
+        self.markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+        await context.bot.send_message(text='Спасибо!, Выберите действие', chat_id=update.effective_chat.id,
+                                       reply_markup=self.markup)
+        # Отчищаем user_data
+        context.user_data.clear()
+        # Завершаем диалог
+        return ConversationHandler.END

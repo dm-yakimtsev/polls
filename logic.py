@@ -19,8 +19,6 @@ class Logic:
     def start(self):
         """Добавляем все обработчики"""
         self.app.add_handler(self.create_dialoge())
-        self.app.add_handler(CommandHandler('start', self.command.start))
-
         self.app.add_handler(MessageHandler(filters.ALL, self.command.help))
 
 
@@ -34,6 +32,7 @@ class Logic:
                                          self.command.get_answer),
                           MessageHandler(filters.Regex("^Мои опросы$"),
                                          self.command.show_polls),
+                          CommandHandler('start', self.command.start)
                           ],
 
 
@@ -60,6 +59,11 @@ class Logic:
                     [
                         CallbackQueryHandler(self.command.show_stats, pattern='^.*$'),
                         MessageHandler(filters.TEXT, self.command.show_stats_help)
+                    ],
+                5:
+                    [
+                        CallbackQueryHandler(self.command.definite_poll_answer, pattern='^.*$'),
+                        MessageHandler(filters.TEXT, self.command.answer_to_poll_help)
                     ]
             },
             fallbacks=[CommandHandler('done', self.command.done),
